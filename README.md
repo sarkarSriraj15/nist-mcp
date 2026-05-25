@@ -1,51 +1,49 @@
 # NIST Chemistry WebBook MCP Server
 
-A Model Context Protocol (MCP) server for the **NIST Chemistry WebBook**, providing machine-readable access to thermodynamic and physical chemistry properties.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MCP Protocol](https://img.shields.io/badge/mcp-1.0.0-green.svg)](https://modelcontextprotocol.io/)
+
+The NIST Chemistry WebBook is the gold standard public database for thermodynamic and physical chemistry data — the primary reference for chemical engineers running simulations in Aspen, COMSOL, or MATLAB. The interface, designed in the 1990s, has no API and requires tedious manual navigation through inconsistent HTML pages to extract data. Getting Shomate coefficients for a single compound means scrolling through multiple pages, copying numbers by hand, and repeating this for every compound in a simulation. Just finding the coefficients for one compound takes over 2 minutes for a first-time user. This tool does it in a single query.
+
+Built with **Python**, **FastMCP**, **BeautifulSoup4**, and **diskcache**, this server provides robust lookup, multi-phase parsing, and persistent caching of chemical properties.
 
 ---
 
-### What was the pain point?
-The NIST Chemistry WebBook is the canonical, peer-reviewed public database for thermodynamic, phase change, and chemical property data. Every chemistry and chemical engineering researcher relies on it daily. However:
-1. **No Machine Interface**: It has no official API. The site is a late-1990s web portal designed purely for human-facing web browsers.
-2. **Unstructured Data Layouts**: The data is locked behind inconsistent HTML layouts, multi-phase tables, and complex **transposed matrices** (such as Shomate coefficients where columns represent temperature ranges and rows represent coefficients).
-3. **AI Accessibility Bottleneck**: Autonomous AI agents, material simulators, and automated workflows had to perform slow, brittle, and error-prone web searches or rely on unmaintained, outdated scraping scripts to read thermodynamic figures.
+## 🚀 Key Features
 
----
-
-### What was the solution?
-We built a production-grade **Model Context Protocol (MCP)** server that acts as a secure, local bridge between AI agents and the NIST WebBook. 
-* It translates erratic, unstructured HTML pages directly into deterministic, standard-compliant JSON payloads.
-* It exposes these properties through three clean MCP tools, allowing any compatible AI client (such as Claude Desktop, Cursor, or VS Code) to query, read, and compute thermodynamic equations natively.
-
----
-
-### How was that solution achieved?
-We engineered a robust scraping, parsing, and caching system in Python using modern tools:
-1. **FastMCP Integration**: Leveraged Anthropic's FastMCP SDK over STDIO to define strict tool schemas and capture execution errors as user-friendly `ToolErrors`.
-2. **Dual-Tier Search Resolver**: Built a search routine that attempts high-performance lookups with the `nistchempy` library first, and seamlessly falls back to direct `BeautifulSoup4` URL search scraping if nistchempy is throttled or fails.
-3. **Transposed Table Parsing**: Developed a custom BeautifulSoup parsing algorithm that zips transposed rows of Shomate coefficients ($A$ through $H$), maps validity temperature ranges, and filters chemical phases (gas, liquid, solid) from adjacent HTML elements.
-4. **Local Persistent Cache**: Wrapped fetch requests with a thread-safe `diskcache` layer stored locally (at `~/.cache/nist-mcp`). It honors custom TTL settings to avoid spamming NIST servers and ensure sub-millisecond local responses for cached compounds.
-5. **High Test Coverage**: Implemented a comprehensive `pytest` suite mocking all network requests and validating complex float, CAS, standard state, and Antoine table parsing.
+*   **🔍 Unified Search (`search_compound`)**: Lookup compounds by Name, Molecular Formula, or CAS RN. Returns canonical data, molecular weight, and available WebBook datasets.
+*   **🌡️ Thermochemical Properties (`get_thermodynamic_properties`)**: Fat payload containing:
+    *   **Standard State Data**: $H_f^\circ$, $G_f^\circ$, $S_{298}^\circ$, $C_{p,298}^\circ$ (gas/condensed phases).
+    *   **Transposed Shomate Coefficient Parsing**: Extracts multi-phase, multi-range Shomate equations ($C_p^\circ = A + B \cdot t + C \cdot t^2 + D \cdot t^3 + E / t^2$, $t = T/1000$) mapping correct associations across complex, transposed HTML layouts.
+    *   **Phase Change Properties**: $T_{\text{boil}}$, $T_{\text{fus}}$, $\Delta_{\text{vap}} H^\circ$, and $\Delta_{\text{fus}} H^\circ$.
+*   **⚗️ Antoine & Phase Data (`get_phase_change_data`)**: Dedicated endpoint for Antoine parameters ($A$, $B$, $C$ valid ranges) and boiling/melting temperatures.
+*   **💾 Smart Persistent Caching**: Employs `diskcache` to cache raw NIST pages locally, saving bandwidth and respecting NIST's server load with restart-proof caching.
+*   **🛠️ Robust Multi-tier Search**: Tries high-performance search library `nistchempy` first, with automatic fallback to direct search scraping.
 
 ---
 
 ## 🛠️ Installation & Setup
 
 ### Prerequisites
-Make sure you have **Python 3.11+** and the modern package manager [**`uv`**](https://github.com/astral-sh/uv) installed.
+
+Ensure you have **Python 3.11+** and the modern package manager [**`uv`**](https://github.com/astral-sh/uv) installed.
 
 ### 1. Install Project Dependencies
-Initialize the environment and sync dependencies:
+
+Clone or place the server inside your workspace, then run:
+
 ```bash
 uv sync
 ```
-This automatically installs the required dependencies: `mcp[cli]`, `nistchempy`, `requests`, `beautifulsoup4`, and `diskcache`.
+
+This will automatically create a virtual environment and install all required dependencies: `mcp[cli]`, `nistchempy`, `requests`, `beautifulsoup4`, and `diskcache`.
 
 ---
 
 ## ⚙️ Configuration
 
-The server's caching behavior can be configured using environment variables:
+The server's behavior can be customized using environment variables:
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
@@ -77,20 +75,25 @@ To use this server with Claude Desktop, add it to your `claude_desktop_config.js
   }
 }
 ```
-*Note: Replace `D:\\c\\nist-mcp` with the absolute path to your local repository root.*
+
+*Note: Replace `D:\\c\\nist-mcp` with the absolute path to your server's root folder.*
 
 ---
 
-## 🛠️ Developer Operations
+## 🧑‍💻 Developer Operations
 
 ### Run in Development / Inspector Mode
-To run the interactive MCP inspector for testing and manual tool invocations:
+
+Inspect and manually call tools inside the interactive MCP inspector:
+
 ```bash
 uv run mcp dev src/nist_mcp/server.py
 ```
 
 ### Run Tests
-To run the local unit and mock test suite:
+
+Execute the full unit test suite (testing parsing routines, standard state mappings, transposed Shomate table logic, and error handling):
+
 ```bash
 uv run pytest
 ```
@@ -100,7 +103,7 @@ uv run pytest
 ## 📊 Tool Schema Specifications
 
 ### `search_compound`
-*   **Usage**: Resolves names, formulas, or CAS numbers into canonical compound data.
+*   **Usage**: Resolves names, formulas, or CAS numbers into authoritative IDs.
 *   **Arguments**:
     *   `query` (string, required): The search identifier (e.g. `"water"`, `"C2H6O"`, `"64-17-5"`).
     *   `search_by` (string, optional): One of `"name"`, `"formula"`, `"cas"`. Defaults to `"name"`.
@@ -116,16 +119,69 @@ uv run pytest
     ```
 
 ### `get_thermodynamic_properties`
-*   **Usage**: Fetch thermodynamic properties, standard state values, and Shomate coefficients by CAS RN.
+*   **Usage**: Fetch all thermodynamic properties and Shomate coefficients by CAS RN.
 *   **Arguments**:
     *   `cas` (string, required): The CAS number or compound ID (e.g. `"64-17-5"`).
-*   **Response Schema**: Includes compound info, standard state ($Hf^\circ$, $S_{298}^\circ$, etc.), phase changes, and transposed Shomate parameter lists mapping temperature ranges.
+*   **Response Schema**:
+    ```json
+    {
+      "compound": {
+        "name": "Water",
+        "cas": "7732-18-5",
+        "formula": "H2O",
+        "molecular_weight": 18.0153
+      },
+      "shomate": [
+        {
+          "phase": "gas",
+          "T_min": 500.0,
+          "T_max": 1700.0,
+          "A": 30.092, "B": 6.832514, "C": 6.793435,
+          "D": -2.534480, "E": 0.082139, "F": -250.881,
+          "G": 223.3967, "H": -241.8264,
+          "units": "J/(mol*K)",
+          "equation": "Cp° = A + B*t + C*t² + D*t³ + E/t²  (t = T/1000)"
+        }
+      ],
+      "standard_state": {
+        "Hf_kJ_per_mol": -241.826,
+        "Gf_kJ_per_mol": null,
+        "S298_J_per_mol_K": 188.835,
+        "Cp298_J_per_mol_K": null
+      },
+      "phase_change": {
+        "T_boil_K": 373.15,
+        "T_fus_K": 273.15,
+        "dHvap_kJ_per_mol": 40.65,
+        "dHfus_kJ_per_mol": 6.01
+      }
+    }
+    ```
 
 ### `get_phase_change_data`
-*   **Usage**: Retrieve phase changes (boiling/melting points) and empirical Antoine equations.
+*   **Usage**: Retrieve phase transitions and Antoine vapor pressure parameters by CAS RN.
 *   **Arguments**:
     *   `cas` (string, required): The CAS number or compound ID (e.g. `"64-17-5"`).
-*   **Response Schema**: Contains boiling point, melting point, enthalpies of vaporization/fusion, and valid Antoine parameters.
+*   **Response Schema**:
+    ```json
+    {
+      "phase_change": {
+        "T_boil_K": 351.5,
+        "T_fus_K": 159.0,
+        "dHvap_kJ_per_mol": 42.3,
+        "dHfus_kJ_per_mol": 4.973
+      },
+      "antoine": [
+        {
+          "T_min": 364.8,
+          "T_max": 513.91,
+          "A": 4.92531,
+          "B": 1432.526,
+          "C": -61.819
+        }
+      ]
+    }
+    ```
 
 ---
 
