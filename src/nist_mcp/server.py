@@ -44,24 +44,25 @@ def search_compound(query: str, search_by: str = "name") -> dict:
         raise ToolError(f"Unexpected error: {e}")
 
 @mcp.tool()
-def get_thermodynamic_properties(cas: str) -> dict:
+def get_thermodynamic_properties(cas: str, phase: str = "all") -> dict:
     """
     Retrieve thermodynamic properties for a compound by CAS number.
     Includes Shomate coefficients, standard state values, and phase changes.
     
     Args:
         cas: The CAS Registry Number or NIST ID (e.g., '64-17-5')
+        phase: Optional. 'gas', 'condensed', or 'all' (default: 'all'). Determines which phase's standard state data is returned.
         
     Returns:
         A nested dictionary containing:
           - compound: name, formula, molecular weight, cas
           - shomate: List of objects containing temperature ranges (T_min, T_max), phase, and coefficients (A-H)
-          - standard_state: standard enthalpy of formation (Hf), Gibbs energy of formation (Gf), entropy (S298), Cp298
+          - standard_state: standard enthalpy of formation (Hf), Gibbs energy of formation (Gf), entropy (S298), Cp298. If phase is 'all', keyed by 'gas' and 'condensed'.
           - phase_change: boiling point, melting point, enthalpy of vaporization, enthalpy of fusion
     """
-    logger.info(f"Tool get_thermodynamic_properties called for CAS='{cas}'")
+    logger.info(f"Tool get_thermodynamic_properties called for CAS='{cas}', phase='{phase}'")
     try:
-        return scraper.get_thermodynamic_properties(cas)
+        return scraper.get_thermodynamic_properties(cas, phase)
     except scraper.ScraperError as e:
         logger.error(f"get_thermodynamic_properties failed: {e}")
         raise ToolError(str(e))

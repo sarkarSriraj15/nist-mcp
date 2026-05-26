@@ -48,10 +48,11 @@ def test_parse_standard_state_tables(mock_thermo_page_html):
     soup = BeautifulSoup(mock_thermo_page_html, 'html.parser')
     res = _parse_standard_state_tables(soup)
     
-    assert res["Hf_kJ_per_mol"] == -241.826
-    assert res["S298_J_per_mol_K"] == 188.835
-    assert res["Gf_kJ_per_mol"] is None
-    assert res["Cp298_J_per_mol_K"] is None
+    assert "gas" in res
+    assert res["gas"]["Hf_kJ_per_mol"] == -241.826
+    assert res["gas"]["S298_J_per_mol_K"] == 188.835
+    assert res["gas"]["Gf_kJ_per_mol"] is None
+    assert res["gas"]["Cp298_J_per_mol_K"] is None
 
 def test_parse_phase_change_tables(mock_phase_page_html):
     soup = BeautifulSoup(mock_phase_page_html, 'html.parser')

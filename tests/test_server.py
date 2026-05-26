@@ -63,7 +63,7 @@ def test_server_get_thermodynamic_properties_success():
     with patch("nist_mcp.scraper.get_thermodynamic_properties", return_value=mock_result) as mock_get:
         res = get_thermodynamic_properties("7732-18-5")
         assert res == mock_result
-        mock_get.assert_called_once_with("7732-18-5")
+        mock_get.assert_called_once_with("7732-18-5", "all")
 
 def test_server_get_thermodynamic_properties_error():
     with patch("nist_mcp.scraper.get_thermodynamic_properties", side_effect=ScraperError("No Shomate data")) as mock_get:

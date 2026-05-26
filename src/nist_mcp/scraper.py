@@ -266,14 +266,14 @@ def _parse_shomate_tables(soup: BeautifulSoup, cas_id: str) -> list[dict]:
     return shomate_data
 
 def _parse_standard_state_tables(soup: BeautifulSoup) -> dict:
-    """Parse standard-state thermochemistry data from the page."""
-    standard_state = {}
+    """Parse standard-state thermochemistry data from the page, separating by phase."""
     
-    # Helper to parse one dimensional data tables under given headers
-    def parse_one_dim_tables(h_id):
+    def parse_phase_tables(h_id):
+        phase_data = {}
         section = soup.find(id=h_id)
         if not section:
-            return
+            return None
+            
         sibling = section.next_sibling
         while sibling:
             if sibling.name in ['h1', 'h2', 'h3', 'h4']:
@@ -287,39 +287,47 @@ def _parse_standard_state_tables(soup: BeautifulSoup) -> dict:
                         units = tds[2].text.strip()
                         val = _parse_float(val_text)
                         if val is not None:
-                            standard_state[qty] = {
+                            phase_data[qty] = {
                                 "value": val,
                                 "units": units
                             }
             sibling = sibling.next_sibling
             
-    parse_one_dim_tables('Thermo-Gas')
-    parse_one_dim_tables('Thermo-Condensed')
-    
-    # Map to final output format
-    res = {
-        "Hf_kJ_per_mol": None,
-        "Gf_kJ_per_mol": None,
-        "S298_J_per_mol_K": None,
-        "Cp298_J_per_mol_K": None
-    }
-    
-    for k, data in standard_state.items():
-        val = data["value"]
-        # Check Hf (prioritizing gas/liquid appropriately)
-        if 'ΔfH°' in k or 'DfH°' in k or 'dfH°' in k:
-            res["Hf_kJ_per_mol"] = val
-        # Check Gf
-        elif 'ΔfG°' in k or 'DfG°' in k or 'dfG°' in k or 'ΔgG°' in k or 'DgG°' in k:
-            res["Gf_kJ_per_mol"] = val
-        # Check S298
-        elif k.startswith('S°') or k.startswith('S298'):
-            res["S298_J_per_mol_K"] = val
-        # Check Cp298
-        elif k.startswith('Cp°') or k.startswith('Cp,'):
-            res["Cp298_J_per_mol_K"] = val
+        if not phase_data:
+            return None
             
-    return res
+        res = {
+            "Hf_kJ_per_mol": None,
+            "Gf_kJ_per_mol": None,
+            "S298_J_per_mol_K": None,
+            "Cp298_J_per_mol_K": None
+        }
+        
+        for k, data in phase_data.items():
+            val = data["value"]
+            if 'ΔfH°' in k or 'DfH°' in k or 'dfH°' in k:
+                res["Hf_kJ_per_mol"] = val
+            elif 'ΔfG°' in k or 'DfG°' in k or 'dfG°' in k or 'ΔgG°' in k or 'DgG°' in k:
+                res["Gf_kJ_per_mol"] = val
+            elif k.startswith('S°') or k.startswith('S298'):
+                res["S298_J_per_mol_K"] = val
+            elif k.startswith('Cp°') or k.startswith('Cp,'):
+                res["Cp298_J_per_mol_K"] = val
+                
+        if any(v is not None for v in res.values()):
+            return res
+        return None
+
+    result = {}
+    gas_data = parse_phase_tables('Thermo-Gas')
+    if gas_data:
+        result["gas"] = gas_data
+        
+    condensed_data = parse_phase_tables('Thermo-Condensed')
+    if condensed_data:
+        result["condensed"] = condensed_data
+        
+    return result
 
 def _parse_phase_change_tables(soup: BeautifulSoup) -> dict:
     """Parse phase-change and vapor pressure data."""
@@ -426,13 +434,13 @@ def _parse_antoine_tables(soup: BeautifulSoup) -> list[dict]:
                                     
     return antoine_params
 
-def get_thermodynamic_properties(cas: str) -> dict:
+def get_thermodynamic_properties(cas: str, phase: str = "all") -> dict:
     """
     Retrieve thermodynamic properties for a compound by CAS.
     Returns:
       compound       → basic info
       shomate        → Shomate coefficients
-      standard_state → Hf, Gf, S298, Cp298 standard values
+      standard_state → Hf, Gf, S298, Cp298 standard values for requested phase(s)
       phase_change   → boiling, melting points and phase change enthalpies
     """
     cas_id = _normalize_cas(cas)
@@ -461,7 +469,14 @@ def get_thermodynamic_properties(cas: str) -> dict:
     if not shomate:
         raise ScraperError(f"No Shomate data available for CAS {cas} on NIST WebBook.")
         
-    standard_state = _parse_standard_state_tables(soup)
+    all_standard_state = _parse_standard_state_tables(soup)
+    if phase == "gas":
+        standard_state = all_standard_state.get("gas", {})
+    elif phase == "condensed":
+        standard_state = all_standard_state.get("condensed", {})
+    else:
+        standard_state = all_standard_state
+        
     phase_change = _parse_phase_change_tables(soup)
     
     return {
