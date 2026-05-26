@@ -90,3 +90,36 @@ def test_server_get_phase_change_data_success():
         res = get_phase_change_data("64-17-5")
         assert res == mock_result
         mock_get.assert_called_once_with("64-17-5")
+
+def test_server_get_vapor_pressure_success():
+    mock_result = {
+        "antoine": [
+            {
+                "T_min": 273.0, "T_max": 379.0,
+                "A": 5.08354, "B": 1663.125, "C": -45.622
+            }
+        ]
+    }
+    with patch("nist_mcp.scraper.get_phase_change_data", return_value=mock_result) as mock_get:
+        from nist_mcp.server import get_vapor_pressure
+        res = get_vapor_pressure("7732-18-5", 373.15)
+        
+        # P = 10^(5.08354 - (1663.125 / (373.15 - 45.622))) = 1.0133 bar = 101.33 kPa
+        assert abs(res["vapor_pressure_kPa"] - 101.33) < 0.1
+        assert res["antoine_used"]["A"] == 5.08354
+        mock_get.assert_called_once_with("7732-18-5")
+
+def test_server_get_vapor_pressure_out_of_range():
+    mock_result = {
+        "antoine": [
+            {
+                "T_min": 379.0, "T_max": 573.0,
+                "A": 5.08354, "B": 1663.125, "C": -45.622
+            }
+        ]
+    }
+    with patch("nist_mcp.scraper.get_phase_change_data", return_value=mock_result):
+        from nist_mcp.server import get_vapor_pressure
+        with pytest.raises(ToolError) as exc_info:
+            get_vapor_pressure("7732-18-5", 300.0)
+        assert "No valid Antoine parameters found" in str(exc_info.value)

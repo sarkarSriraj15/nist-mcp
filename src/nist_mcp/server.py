@@ -1,5 +1,6 @@
 import logging
 import sys
+import math
 from mcp.server.fastmcp import FastMCP
 
 # Setup logging
@@ -91,6 +92,56 @@ def get_phase_change_data(cas: str) -> dict:
         raise ToolError(str(e))
     except Exception as e:
         logger.exception("Unexpected error in get_phase_change_data")
+        raise ToolError(f"Unexpected error: {e}")
+
+@mcp.tool()
+def get_vapor_pressure(cas: str, temperature_K: float) -> dict:
+    """
+    Calculate vapor pressure of a compound at a given temperature using Antoine parameters.
+    
+    Args:
+        cas: The CAS Registry Number or NIST ID (e.g., '64-17-5')
+        temperature_K: The temperature in Kelvin
+        
+    Returns:
+        A dictionary containing:
+          - vapor_pressure_bar: Vapor pressure in bar
+          - vapor_pressure_kPa: Vapor pressure in kilopascals (kPa)
+          - antoine_used: The Antoine parameters (A, B, C) and range used
+    """
+    logger.info(f"Tool get_vapor_pressure called for CAS='{cas}', T={temperature_K}K")
+    try:
+        data = scraper.get_phase_change_data(cas)
+        antoine_params = data.get("antoine", [])
+        
+        valid_param = None
+        for param in antoine_params:
+            if param.get("T_min") is not None and param.get("T_max") is not None:
+                if param["T_min"] <= temperature_K <= param["T_max"]:
+                    valid_param = param
+                    break
+                    
+        if not valid_param:
+            raise ToolError(f"No valid Antoine parameters found for {cas} at {temperature_K}K.")
+            
+        A, B, C = valid_param["A"], valid_param["B"], valid_param["C"]
+        # log10(P) = A - (B / (T + C)), P in bar
+        log10_P = A - (B / (temperature_K + C))
+        P_bar = math.pow(10, log10_P)
+        P_kPa = P_bar * 100.0
+        
+        return {
+            "vapor_pressure_bar": P_bar,
+            "vapor_pressure_kPa": P_kPa,
+            "antoine_used": valid_param
+        }
+    except scraper.ScraperError as e:
+        logger.error(f"get_vapor_pressure failed: {e}")
+        raise ToolError(str(e))
+    except ToolError:
+        raise
+    except Exception as e:
+        logger.exception("Unexpected error in get_vapor_pressure")
         raise ToolError(f"Unexpected error: {e}")
 
 def main():
